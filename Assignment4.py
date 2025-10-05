@@ -80,23 +80,31 @@ def getInputCombos(num_vars):
 
     # use a for loop to go from 0 to the total num of combos - 1
     for i in range(numCombos):
-        # convert the current number to binary
+        # convert the current number to binary string using built-in python function
+        # the bin() function ads a "0b" prefix, which is why we slice the string from index 2 to the end
+        # effectively removing the "0b" string which is unnecessary
         binary_str = bin(i)[2:]
+
         # add leading 0s to match the number of variables
+        # using string method (ensures every binary number has the correct number of digits)
         paddedBinaryStr = binary_str.zfill(num_vars)
 
-        # convert the string to a list of integers and add the combination to the list
+        # list comprehension loops through each character in the string and converts it to an integer
         combo =[int(bit) for bit in paddedBinaryStr]
+
+        # add that list to the comboList, effectively creating the truth table (a 2D array)
         comboList.append(combo)
 
-    # return the complete list of combinations
+    # return the complete list of combinations (a 2D array of the different rows in the truth table)
     return comboList
 
 # function to translate the expression back to Python for calculating
 # SOURCE: Gemini
 def translateToPython(expr):
-    # put the original symbols ! · and + back into the string
+    # put the original symbols ! · and + back into the string using the .replace method
     pyExpr = expr.replace("!", "not ").replace("·", " and ").replace("+", " or ")
+
+    # return the updated expression
     return pyExpr
 
 # function to generate the truth table, provided the LHS, RHS, variables, input combos, and condition
