@@ -102,6 +102,7 @@ def getInputCombos(num_vars):
 # SOURCE: Gemini
 def translateToPython(expr):
     # put the original symbols ! · and + back into the string using the .replace method
+    # these symbols allow python to literally interpret the boolean property
     pyExpr = expr.replace("!", "not ").replace("·", " and ").replace("+", " or ")
 
     # return the updated expression
@@ -110,57 +111,71 @@ def translateToPython(expr):
 # function to generate the truth table, provided the LHS, RHS, variables, input combos, and condition
 # SOURCE: Gemini
 def generateTable(LHS, RHS, vars, combos, condition):
-    # convert the LHS and RHS into Python expressions that can be read
+    # convert the LHS and RHS into executable python expressions
     pyLHS = translateToPython(LHS)
     pyRHS = translateToPython(RHS)
 
-    # if there are no variables, simply evaluate the LHS
+    # create a list of the individual strings that will make up the column headers
+    # if there are no variables (only constants)
     if not vars:
-        print("(This property has no variables; the table shows a single calculation)")
+        # for constant properties, the headers are just the LHS and RHS
+        header_parts = [LHS, RHS]
+    else:
+        # otherwise, for properties with variables, headers are the variables plus the LHS and RHS
+        header_parts = vars + [LHS, RHS]
 
-        # Calculate the result of both sides
+    # calculate the width of each column by finding the length of each header part (used for alignment)
+    column_widths = [len(part) for part in header_parts]
+
+    # join the header parts with a separator to create the final header string and print
+    header_str = " | ".join(header_parts)
+    print(header_str)
+
+    # create and print a separator line that matches the width of the columns
+    # create a list of dashes for each column
+    separator_parts = ['-' * width for width in column_widths]
+    # join the dashes with a '+' to create the final separator
+    separator_str = "-+-".join(separator_parts)
+    # print the separator
+    print(separator_str)
+
+    # if there are no variables (ie only constants, such as properties 1a through 3b)
+    if not vars:
+        # calculate the result for the single row, store those results in a list
         lhs_result = int(eval(pyLHS))
         rhs_result = int(eval(pyRHS))
+        row_values = [lhs_result, rhs_result]
 
-        # Create and print the table header
-        header = f"| {LHS} | {RHS} |"
-        print(header)
-        print("-" * len(header))
+        # use a list comprehension to format each value in the row
+        # .center(width) pads the value with spaces to match its column's width
+        formatted_cells = [str(row_values[i]).center(column_widths[i]) for i in range(len(row_values))]
 
-        # Calculate column widths for alignment
-        col1_width = len(LHS)
-        col2_width = len(RHS)
+        # join the centered cells and print the row
+        print(" | ".join(formatted_cells))
 
-        # Create and print the single row of calculated values, centered in the columns
-        row_str = f"| {str(lhs_result).center(col1_width)} | {str(rhs_result).center(col2_width)} |"
-        print(row_str)
+    # otherwise, the property contains variables
+    else:
+        # loop through each input combination (e.g., [0, 0], [0, 1], etc.).
+        for combo in combos:
+            # create a 'scope' dictionary to map variable names to their current values for this row
+            # for example is vars is [x,y] and combo is [0,1] the resulting scope is {x:0, y:1}
+            scope = {vars[j]: combo[j] for j in range(len(vars))}
 
-        # State whether the property holds true based on the comparison
-        if lhs_result == rhs_result:
-            print("\nProof: The columns are equal, so the property holds.")
-        else:
-            print("\nProof: The property is FALSE because the columns are not equal.")
-        return
+            # use the condition (e.g., "x == 0" or "True") to filter out rows for properties 4a/4b
+            if eval(condition, {}, scope):
+                # if the condition is met, calculate the LHS and RHS results for this row
+                lhs_result = int(eval(pyLHS, {}, scope))
+                rhs_result = int(eval(pyRHS, {}, scope))
 
-    # Build and print the table header
-    header = " | ".join(vars) + f" | {LHS} | {RHS}"
-    print(header)
-    print("-" * len(header))
+                # store the inputs and the results
+                row_values = list(combo) + [lhs_result, rhs_result]
 
-    # Loop through each input combination to create a table row
-    for combo in combos:
-        # Create a 'scope' dictionary to map variables to their current values
-        scope = {vars[j]: combo[j] for j in range(len(vars))}
+                # format each value in the row to be centered within its column width
+                formatted_cells = [str(row_values[i]).center(column_widths[i]) for i in range(len(row_values))]
 
-        # Use eval() to execute the condition string, not just check if it exists.
-        if eval(condition, {}, scope):
-            # Calculate the result for the LHS and RHS
-            lhs_result = int(eval(pyLHS, {}, scope))
-            rhs_result = int(eval(pyRHS, {}, scope))
+                # join the centered cells and print the aligned row.
+                print(" | ".join(formatted_cells))
 
-            # Combine inputs and results and print the formatted row
-            row_values = list(combo) + [lhs_result, rhs_result]
-            print(" | ".join(map(str, row_values)))
 
 # function to prove the boolean property
 # provided the key and value pair from the booleanPropDict
@@ -176,20 +191,37 @@ def proveProperty(key, value):
 
     # the number of variables is equal to the length of the variablesInProp list
     numVARS = len(variablesInProp)
+
+    # below only runs if variables exist, generating the input combinations (truth table rows)
+    # for the variables found
     comboList = getInputCombos(numVARS) if numVARS > 0 else []
 
-    # Parse the property to find the condition (if any) and equation parts
+    # parse the property to find the condition (if any) and equation parts
+    # set the condition to True (serves as a flag for a normal property such as x*y = y*x)
     condition_python = "True"
+
+    # checking for property 4a and 4b
     if "If" in value:
+        # split the string into the condition and the conclusion using "then" as the delimiter
         parts = value.split("then")
+
+        # take the first half of the string and clean it (removing 'If' and commas)
+        # remove leading and trailing whitespace
         condition_str = parts[0].replace("If", "").strip().replace(",", "").strip()
+
+        # convert the clean string into a python executable by replacing = with ==
         condition_python = condition_str.replace("=", "==")
+
+        # take the second half and remove whitespace
         conclusion = parts[1].strip()
+        # finally, split the conclusion by the = sign to obtain the expression needed for the proof
         equationParts = [p.strip() for p in conclusion.split("=")]
     else:
+        # otherwise, the property is standard and simply needs to be split at the = sign
+        # while also removing leading and trailing whitespace
         equationParts = [p.strip() for p in value.split("=")]
 
-    # use a for loop to loop through both (or more) parts simultaneously
+    # use a for loop to loop through both (or more) parts of the equation
     for i in range(len(equationParts) - 1):
         # obtain the LHS and the RHS respectfully
         LHS = equationParts[i]
@@ -199,16 +231,35 @@ def proveProperty(key, value):
         LHS_words = translateExpression(LHS)
         RHS_words = translateExpression(RHS)
 
+        # print the LHS and RHS words for clarity
         print(f"LHS = {LHS_words}")
         print(f"RHS = {RHS_words}")
 
-        # generate the truth table
+        # generate the truth table, calling the function defined earlier
         generateTable(LHS=LHS, RHS=RHS, vars=variablesInProp, combos=comboList, condition=condition_python)
 
+        # check if this is NOT the last pair in the equationParts
+        if i < len(equationParts) - 2:
+            # if it's not the last one, print a blank line for spacing
+            # used for clarity in properties 3a and 3b
+            print()
+
+    # print a final separator for clarity
     print("\n" + "=" * 40 + "\n")
+
+# function that serves as the main method for writing the proofs
+# SOURCE: Myself
+def mainMethod():
+    # print a header for clarity
+    print("\n" + "=" * 40 + "\n")
+
+    # use a for loop to iterate through the dictionary
+    for key, value in booleanPropDict.items():
+
+        # call prove property for each key,value pair
+        proveProperty(key, value)
 
 
 if __name__ == '__main__':
-    print("\n" + "=" * 40 + "\n")
-    for key, value in booleanPropDict.items():
-        proveProperty(key, value)
+    # call the mainMethod to run the program
+    mainMethod()
